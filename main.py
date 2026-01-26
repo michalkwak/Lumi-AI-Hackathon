@@ -1,6 +1,10 @@
 import pandas as pd
 import numpy as np
 import re
+import matplotlib.pyplot as plt
+import os
+
+print("Current working directory:", os.getcwd())
 
 # ---------------------------
 # 1) Load data (your files)
@@ -15,10 +19,11 @@ def load_data(file_path):
         skiprows=2,   # <-- critical fix
         header=0
     )
+BASE_DIR = r"C:\Users\kanci\OneDrive\Pulpit\hackathon"
 
-gross_income_data = load_data("gross_income.csv")
-population_data = load_data("population.csv")
-unemployment_data = load_data("unemployment_rate.csv")
+gross_income_data = load_data(f"{BASE_DIR}\\gross_income.csv")
+population_data = load_data(f"{BASE_DIR}\\population.csv")
+unemployment_data = load_data(f"{BASE_DIR}\\unemployment_rate.csv")
 
 # Basic column cleanup
 for df in (gross_income_data, population_data, unemployment_data):
@@ -30,7 +35,7 @@ print("\nPopulation head:\n", population_data.head())
 print("\nUnemployment head:\n", unemployment_data.head())
 
 # ---------------------------
-# 2) Helper: wide -> long with year extraction
+# 2 Helper: wide -> long with year extraction
 # ---------------------------
 YEAR_RE = re.compile(r"(19|20)\d{2}")
 
@@ -83,7 +88,7 @@ def wide_to_long_extract_year(df, id_col, value_name, extra_keep_cols=None, filt
     return long_df.drop(columns=["YearRaw"])
 
 # ---------------------------
-# 3) Build long tables
+# 3 Build long tables
 # ---------------------------
 
 # Gross income file:
@@ -139,7 +144,7 @@ print(population_long.head())
 print(unemployment_long.head())
 
 # ---------------------------
-# 4) Merge on Municipality + Year
+# 4 Merge on Municipality + Year
 # ---------------------------
 merged = gross_income_long.merge(population_long, on=["Municipality", "Year"], how="inner")
 merged = merged.merge(unemployment_long, on=["Municipality", "Year"], how="inner")
@@ -151,7 +156,7 @@ print("\nMerged sample:\n", merged.head())
 print("Merged rows:", len(merged), "| years:", merged["Year"].nunique(), "| municipalities:", merged["Municipality"].nunique())
 
 # ---------------------------
-# 5) Economic Resilience Index (per-year normalization)
+# 5 Economic Resilience Index (per-year normalization)
 # ---------------------------
 def minmax(series: pd.Series) -> pd.Series:
     s = pd.to_numeric(series, errors="coerce")
@@ -192,3 +197,40 @@ merged.pivot_table(
 print("\nSaved:")
 print("- finland_economic_resilience_index_long.csv")
 print("- finland_economic_resilience_index_wide.csv")
+
+
+def plot_city_resilience(df, city):
+    city_df = df[df["Municipality"] == city].sort_values("Year")
+
+    plt.figure(figsize=(8, 4))
+    plt.plot(city_df["Year"], city_df["EconomicResilienceIndex_100"])
+    plt.title(f"Economic Resilience Index – {city}")
+    plt.xlabel("Year")
+    plt.ylabel("Resilience Index (0–100)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+#plot_city_resilience(merged, "Helsinki")
+
+
+
+def plot_multiple_cities(df, cities):
+    plt.figure(figsize=(10, 5))
+
+    for city in cities:
+        city_df = df[df["Municipality"] == city].sort_values("Year")
+        plt.plot(city_df["Year"], city_df["EconomicResilienceIndex_100"], label=city)
+
+    plt.title("Economic Resilience Index Over Time")
+    plt.xlabel("Year")
+    plt.ylabel("Resilience Index (0–100)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+plot_multiple_cities(
+    merged,
+    ["Helsinki", "Tampere", "Turku", "Oulu"]
+)
