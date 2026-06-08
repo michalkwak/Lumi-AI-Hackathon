@@ -6,17 +6,15 @@ import os
 
 print("Current working directory:", os.getcwd())
 
-# ---------------------------
-# 1) Load data (your files)
-# ---------------------------
+# Loading data
 def load_data(file_path):
-    # These files are comma-separated and have a title row + blank row, then header row (row 3)
+    # files are comma-separated and have a title row + blank row, then header row (row 3)
     return pd.read_csv(
         file_path,
         encoding="latin1",
         sep=",",
         engine="python",
-        skiprows=2,   # <-- critical fix
+        skiprows=2,
         header=0
     )
 BASE_DIR = r"C:\Users\kanci\OneDrive\Pulpit\hackathon"
@@ -25,7 +23,7 @@ gross_income_data = load_data(f"{BASE_DIR}\\gross_income.csv")
 population_data = load_data(f"{BASE_DIR}\\population.csv")
 unemployment_data = load_data(f"{BASE_DIR}\\unemployment_rate.csv")
 
-# Basic column cleanup
+# column cleanup
 for df in (gross_income_data, population_data, unemployment_data):
     df.columns = df.columns.astype(str).str.strip().str.replace("\xa0", " ", regex=False)
 
@@ -34,9 +32,8 @@ print("\nGross income head:\n", gross_income_data.head())
 print("\nPopulation head:\n", population_data.head())
 print("\nUnemployment head:\n", unemployment_data.head())
 
-# ---------------------------
-# 2 Helper: wide -> long with year extraction
-# ---------------------------
+
+# wide -> long with year extraction
 YEAR_RE = re.compile(r"(19|20)\d{2}")
 
 def wide_to_long_extract_year(df, id_col, value_name, extra_keep_cols=None, filter_total_col=None):
@@ -48,7 +45,7 @@ def wide_to_long_extract_year(df, id_col, value_name, extra_keep_cols=None, filt
     """
     df = df.copy()
 
-    # Optional filtering (used for population: keep only Total)
+    # optional filtering (used for population: keep only Total)
     if filter_total_col is not None:
         col, wanted = filter_total_col
         df = df[df[col].astype(str).str.strip() == wanted]
@@ -57,7 +54,7 @@ def wide_to_long_extract_year(df, id_col, value_name, extra_keep_cols=None, filt
     if extra_keep_cols:
         keep_cols += extra_keep_cols
 
-    # All columns that contain a year
+    # all columns that contain a year
     year_cols = [c for c in df.columns if YEAR_RE.search(str(c))]
     if not year_cols:
         raise ValueError(f"No year columns detected in {value_name}. Columns start: {list(df.columns)[:15]}")
@@ -70,26 +67,26 @@ def wide_to_long_extract_year(df, id_col, value_name, extra_keep_cols=None, filt
         value_name=value_name
     )
 
-    # Extract numeric year from column names
+    # axtract numeric year from column names
     long_df["Year"] = long_df["YearRaw"].astype(str).str.extract(r"((?:19|20)\d{2})", expand=False)
     long_df["Year"] = pd.to_numeric(long_df["Year"], errors="coerce")
 
-    # Standardize municipality column name
+    # standardize municipality column name
     long_df = long_df.rename(columns={id_col: "Municipality"})
 
-    # Convert values to numeric; treat '.' as missing
+    # convert values to numeric 
+    # treat '.' as missing
     long_df[value_name] = pd.to_numeric(long_df[value_name], errors="coerce")
 
-    # Drop bad rows
+    # drop bad rows
     long_df = long_df.dropna(subset=["Municipality", "Year", value_name])
     long_df["Municipality"] = long_df["Municipality"].astype(str).str.strip()
     long_df["Year"] = long_df["Year"].astype(int)
 
     return long_df.drop(columns=["YearRaw"])
 
-# ---------------------------
-# 3 Build long tables
-# ---------------------------
+
+# Build long tables
 
 # Gross income file:
 # header shows first column is "Region"
@@ -119,11 +116,11 @@ population_long = wide_to_long_extract_year(
 if "Year" not in unemployment_data.columns:
     raise KeyError(f"Expected 'Year' in unemployment_rate.csv, got: {list(unemployment_data.columns)[:10]}")
 
-# keep only unemployment rate rows (your file includes "Information" column)
+# keep only unemployment rate rows
 unemp = unemployment_data.copy()
 unemp = unemp[unemp["Information"].astype(str).str.contains("Unemployment rate", na=False)]
 
-# Melt municipalities columns
+# melt municipalities columns
 muni_cols = [c for c in unemp.columns if c not in ["Year", "Information"]]
 unemployment_long = unemp.melt(
     id_vars=["Year"],
@@ -143,21 +140,21 @@ print(gross_income_long.head())
 print(population_long.head())
 print(unemployment_long.head())
 
-# ---------------------------
-# 4 Merge on Municipality + Year
-# ---------------------------
+
+# merge on Municipality + Year
+
 merged = gross_income_long.merge(population_long, on=["Municipality", "Year"], how="inner")
 merged = merged.merge(unemployment_long, on=["Municipality", "Year"], how="inner")
 
-# Drop national aggregate if you want only municipalities
+# drop national aggregate if you want only municipalities
 merged = merged[merged["Municipality"].str.upper() != "WHOLE COUNTRY"]
 
 print("\nMerged sample:\n", merged.head())
 print("Merged rows:", len(merged), "| years:", merged["Year"].nunique(), "| municipalities:", merged["Municipality"].nunique())
 
-# ---------------------------
-# 5 Economic Resilience Index (per-year normalization)
-# ---------------------------
+
+# Economic Resilience Index (per-year normalization)
+
 def minmax(series: pd.Series) -> pd.Series:
     s = pd.to_numeric(series, errors="coerce")
     mn, mx = s.min(), s.max()
@@ -183,9 +180,8 @@ merged["EconomicResilienceIndex_100"] = (merged["EconomicResilienceIndex"] * 100
 
 print("\nIndex sample:\n", merged[["Municipality", "Year", "EconomicResilienceIndex_100"]].head())
 
-# ---------------------------
-# 6) Save outputs
-# ---------------------------
+
+# save outputs
 merged.to_csv("finland_economic_resilience_index_long.csv", index=False)
 
 merged.pivot_table(
